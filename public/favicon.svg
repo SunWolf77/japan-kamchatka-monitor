@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#0b0c0e"/>
+  <circle cx="32" cy="32" r="18" stroke="#22d3ee" stroke-width="3"/>
+  <path d="M18 40c6-14 22-14 28 0" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="40" cy="24" r="3" fill="#f43f5e"/>
+  <text x="32" y="55" text-anchor="middle" font-size="8" fill="#94a3b8" font-family="system-ui">JP·KM</text>
+</svg>
