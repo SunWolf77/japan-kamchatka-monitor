@@ -1,0 +1,139 @@
+# Public production health probe (no CRON_SECRET required).
+# Shallow every 15 minutes; optional deep agency probes on demand.
+#
+# Secrets (optional):
+#   HEALTH_URL — override default production /api/health
+#
+# Manual: Actions → Health check → Run workflow
+
+name: Health check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      deep:
+        description: "Probe agencies (deep=1)"
+        type: boolean
+        required: false
+        default: false
+      fail_on_degraded:
+        description: "Fail when status is degraded (not only unhealthy)"
+        type: boolean
+        required: false
+        default: false
+      url:
+        description: "Override health URL (blank = default/secret)"
+        required: false
+        default: ""
+
+concurrency:
+  group: health-check
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Probe japan-kamchatka-monitor health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GET /api/health
+        env:
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}
+          INPUT_URL: ${{ github.event.inputs.url }}
+          INPUT_DEEP: ${{ github.event.inputs.deep }}
+          INPUT_FAIL_DEGRADED: ${{ github.event.inputs.fail_on_degraded }}
+        run: |
+          set -euo pipefail
+
+          DEFAULT_URL="https://japan-kamchatka-monitor.vercel.app/api/health"
+          if [ -n "${INPUT_URL:-}" ]; then
+            BASE_URL="$INPUT_URL"
+          elif [ -n "${HEALTH_URL:-}" ]; then
+            BASE_URL="$HEALTH_URL"
+          else
+            BASE_URL="$DEFAULT_URL"
+          fi
+
+          # schedule runs are always shallow; manual may request deep
+          DEEP="false"
+          if [ "${INPUT_DEEP:-}" = "true" ]; then
+            DEEP="true"
+          fi
+
+          case "$BASE_URL" in
+            *\?*) URL="$BASE_URL" ;;
+            *)    URL="$BASE_URL" ;;
+          esac
+          if [ "$DEEP" = "true" ]; then
+            case "$URL" in
+              *\?*) URL="${URL}&deep=1" ;;
+              *)    URL="${URL}?deep=1" ;;
+            esac
+          fi
+
+          echo "GET $URL"
+          TMP=$(mktemp)
+          attempt=1
+          max=3
+          HTTP="000"
+          while [ "$attempt" -le "$max" ]; do
+            echo "Attempt $attempt/$max …"
+            HTTP=$(curl -sS --max-time 45 \
+              -H "Accept: application/json" \
+              -H "User-Agent: github-actions-health-check/1.0" \
+              -o "$TMP" -w "%{http_code}" \
+              "$URL" || echo "000")
+            echo "HTTP $HTTP"
+            head -c 4000 "$TMP" || true
+            echo ""
+            if [ "$HTTP" = "200" ] || [ "$HTTP" = "503" ]; then
+              break
+            fi
+            attempt=$((attempt + 1))
+            sleep $((attempt * 4))
+          done
+
+          if [ "$HTTP" != "200" ] && [ "$HTTP" != "503" ]; then
+            echo "Health endpoint unreachable after $max attempts (HTTP $HTTP)" >&2
+            rm -f "$TMP"
+            exit 1
+          fi
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq jq >/dev/null
+          fi
+
+          OK=$(jq -r '.ok // empty' <"$TMP" 2>/dev/null || true)
+          STATUS=$(jq -r '.status // empty' <"$TMP" 2>/dev/null || true)
+          BOARD=$(jq -r '.board // empty' <"$TMP" 2>/dev/null || true)
+          echo "board=${BOARD:-?} ok=${OK:-?} status=${STATUS:-?}"
+
+          # Print check summary
+          jq -r '.checks[]? | "  \(.status)\t\(.name)\t\(.detail // "")"' <"$TMP" 2>/dev/null || true
+
+          FAIL_DEGRADED="false"
+          if [ "${INPUT_FAIL_DEGRADED:-}" = "true" ]; then
+            FAIL_DEGRADED="true"
+          fi
+
+          if [ "$HTTP" = "503" ] || [ "$OK" = "false" ] || [ "$STATUS" = "unhealthy" ]; then
+            echo "::error::Board unhealthy (HTTP $HTTP status=$STATUS)"
+            rm -f "$TMP"
+            exit 1
+          fi
+
+          if [ "$STATUS" = "degraded" ]; then
+            echo "::warning::Board degraded (config or agency issues — see checks)"
+            if [ "$FAIL_DEGRADED" = "true" ]; then
+              rm -f "$TMP"
+              exit 1
+            fi
+          fi
+
+          echo "Health check passed"
+          rm -f "$TMP"

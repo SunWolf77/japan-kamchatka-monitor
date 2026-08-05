@@ -101,3 +101,11 @@ curl -sS https://BOARD.vercel.app/api/health?deep=1 | jq .
 - Shallow: app + config (no agency network)
 - Deep: also probes primary agencies
 - HTTP 200 = ok / degraded; 503 = unhealthy (core config missing)
+
+### Automated health (GitHub Actions)
+
+Workflow **Health check** runs every 15 minutes against production `/api/health`.
+
+- Manual: Actions → Health check → Run workflow (`deep` optional)
+- Degraded status warns but does not fail (unless `fail_on_degraded`)
+- Unhealthy / HTTP 503 fails the job
