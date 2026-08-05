@@ -62,3 +62,20 @@ npm run build
 ---
 
 *SunWolf · SolWatch / SES observational network*
+
+## Catalog cron (Vercel + GitHub Actions)
+
+Keeps focus-node catalogs warm for SES and first visitors.
+
+| Layer | Schedule | Path |
+|-------|----------|------|
+| **Vercel Cron** | daily 12:00 UTC | `/api/cron` |
+| **GitHub Actions** | every 15 min | `.github/workflows/catalog-cron.yml` |
+
+Set the same `CRON_SECRET` on Vercel (env) and GitHub Actions (secret) to lock the endpoint. Until set, the route stays open for smoke tests.
+
+Manual:
+
+```bash
+curl -sS "https://YOUR-BOARD.vercel.app/api/cron" | jq .
+```

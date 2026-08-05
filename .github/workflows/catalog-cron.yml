@@ -1,0 +1,102 @@
+# Warm Japan–Kamchatka catalogs on production (Hobby-friendly).
+# Hits GET /api/cron every 15 minutes — same work as Vercel Cron.
+#
+# Secrets (repo Settings → Secrets and variables → Actions):
+#   CRON_SECRET — must match Vercel env CRON_SECRET (Bearer auth)
+#   CRON_URL    — optional override; default production /api/cron
+
+name: Catalog cron warm
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Catalog window in days (1–30)"
+        required: false
+        default: "7"
+      url:
+        description: "Override cron URL (blank = secret/default)"
+        required: false
+        default: ""
+
+concurrency:
+  group: catalog-cron-warm
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    name: Warm Japan · Kamchatka
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Invoke /api/cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_URL: ${{ secrets.CRON_URL }}
+          INPUT_URL: ${{ github.event.inputs.url }}
+          INPUT_DAYS: ${{ github.event.inputs.days }}
+        run: |
+          set -euo pipefail
+
+          DEFAULT_URL="https://japan-kamchatka-monitor.vercel.app/api/cron"
+          if [ -n "${INPUT_URL:-}" ]; then
+            BASE_URL="$INPUT_URL"
+          elif [ -n "${CRON_URL:-}" ]; then
+            BASE_URL="$CRON_URL"
+          else
+            BASE_URL="$DEFAULT_URL"
+          fi
+
+          DAYS="${INPUT_DAYS:-7}"
+          DAYS="$(echo "$DAYS" | tr -cd '0-9')"
+          if [ -z "$DAYS" ]; then DAYS=7; fi
+          if [ "$DAYS" -lt 1 ]; then DAYS=1; fi
+          if [ "$DAYS" -gt 30 ]; then DAYS=30; fi
+
+          case "$BASE_URL" in
+            *\?*) URL="${BASE_URL}&days=${DAYS}" ;;
+            *)    URL="${BASE_URL}?days=${DAYS}" ;;
+          esac
+
+          echo "GET $URL"
+          if [ -n "${CRON_SECRET:-}" ]; then
+            echo "Auth: Bearer CRON_SECRET"
+          else
+            echo "Auth: none (open mode — set CRON_SECRET when locking the endpoint)"
+          fi
+
+          attempt=1
+          max=3
+          while [ "$attempt" -le "$max" ]; do
+            echo "Attempt $attempt/$max …"
+            TMP=$(mktemp)
+            HTTP=$(curl -sS --max-time 90 \
+              -H "Accept: application/json" \
+              -H "User-Agent: github-actions-catalog-cron/1.0" \
+              ${CRON_SECRET:+-H "Authorization: Bearer ${CRON_SECRET}"} \
+              -o "$TMP" -w "%{http_code}" \
+              "$URL" || echo "000")
+            echo "HTTP $HTTP"
+            head -c 4000 "$TMP" || true
+            echo ""
+            if [ "$HTTP" = "200" ] || [ "$HTTP" = "207" ]; then
+              if command -v jq >/dev/null 2>&1; then
+                OK=$(jq -r '.ok // empty' <"$TMP" 2>/dev/null || true)
+                TOTAL=$(jq -r '.totalEvents // empty' <"$TMP" 2>/dev/null || true)
+                echo "ok=${OK:-?} totalEvents=${TOTAL:-?}"
+              fi
+              rm -f "$TMP"
+              exit 0
+            fi
+            rm -f "$TMP"
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done
+
+          echo "Catalog warm failed after $max attempts" >&2
+          exit 1
