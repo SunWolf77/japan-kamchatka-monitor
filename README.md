@@ -79,3 +79,14 @@ Manual:
 ```bash
 curl -sS "https://YOUR-BOARD.vercel.app/api/cron" | jq .
 ```
+
+### Securing `/api/cron`
+
+Production **fails closed** without `CRON_SECRET` (HTTP 503).
+
+1. Generate: `openssl rand -hex 32`
+2. Vercel → Project → Settings → Environment Variables → **Production** → `CRON_SECRET`
+3. GitHub → Settings → Secrets and variables → Actions → `CRON_SECRET` (same value)
+4. Redeploy
+
+Callers must send `Authorization: Bearer <CRON_SECRET>` (or `X-Cron-Secret`). Query-string secrets are rejected.

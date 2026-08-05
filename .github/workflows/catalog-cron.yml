@@ -43,6 +43,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "CRON_SECRET is required (GitHub Actions secret)." >&2
+            echo "Set the same value on Vercel → Environment Variables → CRON_SECRET." >&2
+            exit 1
+          fi
+
           DEFAULT_URL="https://japan-kamchatka-monitor.vercel.app/api/cron"
           if [ -n "${INPUT_URL:-}" ]; then
             BASE_URL="$INPUT_URL"

@@ -4,20 +4,42 @@ import { listFocusNodes } from "@/lib/seismic/focus-nodes";
 import type { FocusNodeId } from "@/lib/seismic/types";
 import type { WindowKey } from "@/lib/seismic/catalog";
 
-function authorize(request: Request): { ok: boolean; reason?: string } {
+function authorize(request: Request): {
+  ok: boolean;
+  status: number;
+  reason?: string;
+} {
   const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return { ok: true, reason: "CRON_SECRET unset — open mode" };
-  const auth = request.headers.get("authorization") ?? "";
-  if (auth === `Bearer ${secret}`) return { ok: true };
-  try {
-    const url = new URL(request.url);
-    if (url.searchParams.get("secret") === secret) {
-      return { ok: true, reason: "query secret" };
+  const isProd =
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production";
+
+  if (!secret) {
+    if (isProd) {
+      return {
+        ok: false,
+        status: 503,
+        reason: "CRON_SECRET not configured on this deployment",
+      };
     }
-  } catch {
-    /* ignore */
+    return { ok: true, status: 200, reason: "CRON_SECRET unset — dev open mode" };
   }
-  return { ok: false, reason: "missing or invalid Authorization bearer" };
+
+  const auth = request.headers.get("authorization") ?? "";
+  if (auth === `Bearer ${secret}`) {
+    return { ok: true, status: 200, reason: "bearer" };
+  }
+
+  const headerSecret = request.headers.get("x-cron-secret") ?? "";
+  if (headerSecret && headerSecret === secret) {
+    return { ok: true, status: 200, reason: "x-cron-secret" };
+  }
+
+  return {
+    ok: false,
+    status: 401,
+    reason: "missing or invalid Authorization bearer",
+  };
 }
 
 function resolveWindow(url: URL): WindowKey {
@@ -42,8 +64,15 @@ export const Route = createFileRoute("/api/cron")({
         const auth = authorize(request);
         if (!auth.ok) {
           return Response.json(
-            { ok: false, error: "Unauthorized", detail: auth.reason },
-            { status: 401 },
+            {
+              ok: false,
+              error: auth.status === 503 ? "Misconfigured" : "Unauthorized",
+              detail: auth.reason,
+            },
+            {
+              status: auth.status,
+              headers: { "Cache-Control": "no-store" },
+            },
           );
         }
 

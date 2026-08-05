@@ -19,7 +19,34 @@ import type { WindowKey } from "../../../src/lib/seismic/catalog";
 
 function authorize(event: Parameters<typeof getHeader>[0]): {
   ok: boolean;
+  status: number;
   reason?: string;
+} {
+  const secret = process.env.CRON_SECRET?.trim();
+  const isProd =
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production";
+  if (!secret) {
+    if (isProd) {
+      return {
+        ok: false,
+        status: 503,
+        reason: "CRON_SECRET not configured on this deployment",
+      };
+    }
+    return { ok: true, status: 200, reason: "CRON_SECRET unset — dev open mode" };
+  }
+  const auth = getHeader(event, "authorization") ?? "";
+  if (auth === `Bearer ${secret}`) return { ok: true, status: 200, reason: "bearer" };
+  const headerSecret = getHeader(event, "x-cron-secret") ?? "";
+  if (headerSecret && headerSecret === secret) {
+    return { ok: true, status: 200, reason: "x-cron-secret" };
+  }
+  return {
+    ok: false,
+    status: 401,
+    reason: "missing or invalid Authorization bearer",
+  };
 } {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return { ok: true, reason: "CRON_SECRET unset — open mode" };
@@ -51,8 +78,8 @@ export default defineEventHandler(async (event) => {
   const auth = authorize(event);
   if (!auth.ok) {
     throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized",
+      statusCode: auth.status,
+      statusMessage: auth.status === 503 ? "Misconfigured" : "Unauthorized",
       data: { detail: auth.reason },
     });
   }
