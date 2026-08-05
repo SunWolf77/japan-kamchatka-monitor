@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiCronRouteImport } from './routes/api/cron'
+import { Route as ApiSesCatalogRouteImport } from './routes/api/ses/catalog'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronRoute = ApiCronRouteImport.update({
+  id: '/api/cron',
+  path: '/api/cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSesCatalogRoute = ApiSesCatalogRouteImport.update({
+  id: '/api/ses/catalog',
+  path: '/api/ses/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/cron': typeof ApiCronRoute
+  '/api/ses/catalog': typeof ApiSesCatalogRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/cron': typeof ApiCronRoute
+  '/api/ses/catalog': typeof ApiSesCatalogRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/cron': typeof ApiCronRoute
+  '/api/ses/catalog': typeof ApiSesCatalogRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/cron' | '/api/ses/catalog'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/cron' | '/api/ses/catalog'
+  id: '__root__' | '/' | '/api/cron' | '/api/ses/catalog'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiCronRoute: typeof ApiCronRoute
+  ApiSesCatalogRoute: typeof ApiSesCatalogRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron': {
+      id: '/api/cron'
+      path: '/api/cron'
+      fullPath: '/api/cron'
+      preLoaderRoute: typeof ApiCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ses/catalog': {
+      id: '/api/ses/catalog'
+      path: '/api/ses/catalog'
+      fullPath: '/api/ses/catalog'
+      preLoaderRoute: typeof ApiSesCatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiCronRoute: ApiCronRoute,
+  ApiSesCatalogRoute: ApiSesCatalogRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
