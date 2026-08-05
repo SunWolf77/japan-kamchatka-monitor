@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiCronRouteImport } from './routes/api/cron'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiSesCatalogRouteImport } from './routes/api/ses/catalog'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const ApiCronRoute = ApiCronRouteImport.update({
   path: '/api/cron',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSesCatalogRoute = ApiSesCatalogRouteImport.update({
   id: '/api/ses/catalog',
   path: '/api/ses/catalog',
@@ -32,30 +38,34 @@ const ApiSesCatalogRoute = ApiSesCatalogRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/cron': typeof ApiCronRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/ses/catalog': typeof ApiSesCatalogRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/cron': typeof ApiCronRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/ses/catalog': typeof ApiSesCatalogRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/cron': typeof ApiCronRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/ses/catalog': typeof ApiSesCatalogRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/cron' | '/api/ses/catalog'
+  fullPaths: '/' | '/api/cron' | '/api/health' | '/api/ses/catalog'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/cron' | '/api/ses/catalog'
-  id: '__root__' | '/' | '/api/cron' | '/api/ses/catalog'
+  to: '/' | '/api/cron' | '/api/health' | '/api/ses/catalog'
+  id: '__root__' | '/' | '/api/cron' | '/api/health' | '/api/ses/catalog'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiCronRoute: typeof ApiCronRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiSesCatalogRoute: typeof ApiSesCatalogRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/ses/catalog': {
       id: '/api/ses/catalog'
       path: '/api/ses/catalog'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiCronRoute: ApiCronRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiSesCatalogRoute: ApiSesCatalogRoute,
 }
 export const routeTree = rootRouteImport

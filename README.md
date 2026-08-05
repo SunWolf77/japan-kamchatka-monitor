@@ -90,3 +90,14 @@ Production **fails closed** without `CRON_SECRET` (HTTP 503).
 4. Redeploy
 
 Callers must send `Authorization: Bearer <CRON_SECRET>` (or `X-Cron-Secret`). Query-string secrets are rejected.
+
+## Health
+
+```bash
+curl -sS https://BOARD.vercel.app/api/health | jq .
+curl -sS https://BOARD.vercel.app/api/health?deep=1 | jq .
+```
+
+- Shallow: app + config (no agency network)
+- Deep: also probes primary agencies
+- HTTP 200 = ok / degraded; 503 = unhealthy (core config missing)
