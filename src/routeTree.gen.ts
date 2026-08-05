@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiCronRouteImport } from './routes/api/cron'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiSesCatalogRouteImport } from './routes/api/ses/catalog'
+import { Route as ApiSesVolcanoRouteImport } from './routes/api/ses/volcano'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const ApiSesCatalogRoute = ApiSesCatalogRouteImport.update({
   path: '/api/ses/catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSesVolcanoRoute = ApiSesVolcanoRouteImport.update({
+  id: '/api/ses/volcano',
+  path: '/api/ses/volcano',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/cron': typeof ApiCronRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ses/catalog': typeof ApiSesCatalogRoute
+  '/api/ses/volcano': typeof ApiSesVolcanoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/cron': typeof ApiCronRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ses/catalog': typeof ApiSesCatalogRoute
+  '/api/ses/volcano': typeof ApiSesVolcanoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,22 @@ export interface FileRoutesById {
   '/api/cron': typeof ApiCronRoute
   '/api/health': typeof ApiHealthRoute
   '/api/ses/catalog': typeof ApiSesCatalogRoute
+  '/api/ses/volcano': typeof ApiSesVolcanoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/cron' | '/api/health' | '/api/ses/catalog'
+  fullPaths:
+    '/' | '/api/cron' | '/api/health' | '/api/ses/catalog' | '/api/ses/volcano'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/cron' | '/api/health' | '/api/ses/catalog'
-  id: '__root__' | '/' | '/api/cron' | '/api/health' | '/api/ses/catalog'
+  to:
+    '/' | '/api/cron' | '/api/health' | '/api/ses/catalog' | '/api/ses/volcano'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/cron'
+    | '/api/health'
+    | '/api/ses/catalog'
+    | '/api/ses/volcano'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +84,7 @@ export interface RootRouteChildren {
   ApiCronRoute: typeof ApiCronRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiSesCatalogRoute: typeof ApiSesCatalogRoute
+  ApiSesVolcanoRoute: typeof ApiSesVolcanoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +117,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSesCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ses/volcano': {
+      id: '/api/ses/volcano'
+      path: '/api/ses/volcano'
+      fullPath: '/api/ses/volcano'
+      preLoaderRoute: typeof ApiSesVolcanoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +132,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCronRoute: ApiCronRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiSesCatalogRoute: ApiSesCatalogRoute,
+  ApiSesVolcanoRoute: ApiSesVolcanoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
