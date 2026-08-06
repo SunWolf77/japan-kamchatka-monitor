@@ -1,5 +1,5 @@
 # Public production health probe (no CRON_SECRET required).
-# Shallow every 15 minutes; optional deep agency probes on demand.
+# Hourly shallow probe; optional deep agency probes on demand.
 #
 # Secrets (optional):
 #   HEALTH_URL — override default production /api/health
@@ -10,7 +10,8 @@ name: Health check
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Minute 41 past each hour — stagger vs catalog-cron (17)
+    - cron: "41 * * * *"
   workflow_dispatch:
     inputs:
       deep:
@@ -65,10 +66,7 @@ jobs:
             DEEP="true"
           fi
 
-          case "$BASE_URL" in
-            *\?*) URL="$BASE_URL" ;;
-            *)    URL="$BASE_URL" ;;
-          esac
+          URL="$BASE_URL"
           if [ "$DEEP" = "true" ]; then
             case "$URL" in
               *\?*) URL="${URL}&deep=1" ;;
@@ -85,7 +83,7 @@ jobs:
             echo "Attempt $attempt/$max …"
             HTTP=$(curl -sS --max-time 45 \
               -H "Accept: application/json" \
-              -H "User-Agent: github-actions-health-check/1.0" \
+              -H "User-Agent: github-actions-health-check/1.1" \
               -o "$TMP" -w "%{http_code}" \
               "$URL" || echo "000")
             echo "HTTP $HTTP"
@@ -99,7 +97,7 @@ jobs:
           done
 
           if [ "$HTTP" != "200" ] && [ "$HTTP" != "503" ]; then
-            echo "Health endpoint unreachable after $max attempts (HTTP $HTTP)" >&2
+            echo "::error::Health endpoint unreachable after $max attempts (HTTP $HTTP)"
             rm -f "$TMP"
             exit 1
           fi
