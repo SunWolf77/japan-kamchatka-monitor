@@ -1,15 +1,19 @@
 # Warm Japan–Kamchatka catalogs on production (Hobby-friendly).
-# Hits GET /api/cron every 15 minutes — same work as Vercel Cron.
+# Hits GET /api/cron — same work as Vercel Cron.
 #
 # Secrets (repo Settings → Secrets and variables → Actions):
 #   CRON_SECRET — must match Vercel env CRON_SECRET (Bearer auth)
 #   CRON_URL    — optional override; default production /api/cron
+#
+# Schedule is hourly (not */15) to avoid Actions email spam and runner
+# queue storms. Manual: Actions → Catalog cron warm → Run workflow.
 
 name: Catalog cron warm
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Minute 17 past each hour — avoid :00 / :15 thundering herd on hosted runners
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       days:
@@ -44,8 +48,8 @@ jobs:
           set -euo pipefail
 
           if [ -z "${CRON_SECRET:-}" ]; then
-            echo "CRON_SECRET is required (GitHub Actions secret)." >&2
-            echo "Set the same value on Vercel → Environment Variables → CRON_SECRET." >&2
+            echo "::error::CRON_SECRET is missing from GitHub Actions secrets."
+            echo "Set the same value on Vercel → Environment Variables → CRON_SECRET (Production)."
             exit 1
           fi
 
@@ -70,11 +74,7 @@ jobs:
           esac
 
           echo "GET $URL"
-          if [ -n "${CRON_SECRET:-}" ]; then
-            echo "Auth: Bearer CRON_SECRET"
-          else
-            echo "Auth: none (open mode — set CRON_SECRET when locking the endpoint)"
-          fi
+          echo "Auth: Bearer CRON_SECRET"
 
           attempt=1
           max=3
@@ -83,13 +83,33 @@ jobs:
             TMP=$(mktemp)
             HTTP=$(curl -sS --max-time 90 \
               -H "Accept: application/json" \
-              -H "User-Agent: github-actions-catalog-cron/1.0" \
-              ${CRON_SECRET:+-H "Authorization: Bearer ${CRON_SECRET}"} \
+              -H "User-Agent: github-actions-catalog-cron/1.1" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
               -o "$TMP" -w "%{http_code}" \
               "$URL" || echo "000")
             echo "HTTP $HTTP"
             head -c 4000 "$TMP" || true
             echo ""
+
+            # Config / auth failures never recover by retrying — fail once with a clear message
+            if [ "$HTTP" = "401" ]; then
+              echo "::error::Unauthorized — CRON_SECRET on GitHub Actions does not match Vercel Production CRON_SECRET."
+              echo "Fix: Vercel → Project → Settings → Environment Variables → CRON_SECRET"
+              echo "     GitHub → Settings → Secrets and variables → Actions → CRON_SECRET"
+              echo "Both must be identical. Redeploy Vercel after changing env."
+              rm -f "$TMP"
+              exit 1
+            fi
+            if [ "$HTTP" = "503" ]; then
+              DETAIL=$(jq -r '.detail // empty' <"$TMP" 2>/dev/null || true)
+              if echo "$DETAIL" | grep -qi 'CRON_SECRET'; then
+                echo "::error::Production has no CRON_SECRET — endpoint fails closed (503)."
+                echo "Add CRON_SECRET on Vercel Production (same value as GitHub Actions) and redeploy."
+                rm -f "$TMP"
+                exit 1
+              fi
+            fi
+
             if [ "$HTTP" = "200" ] || [ "$HTTP" = "207" ]; then
               if command -v jq >/dev/null 2>&1; then
                 OK=$(jq -r '.ok // empty' <"$TMP" 2>/dev/null || true)
@@ -99,10 +119,16 @@ jobs:
               rm -f "$TMP"
               exit 0
             fi
+
             rm -f "$TMP"
+            # Only retry transient network / 5xx / cold-start failures
+            if [ "$HTTP" != "000" ] && [ "$HTTP" -lt 500 ] 2>/dev/null; then
+              echo "::error::Catalog warm failed with HTTP $HTTP (non-retryable)"
+              exit 1
+            fi
             attempt=$((attempt + 1))
             sleep $((attempt * 5))
           done
 
-          echo "Catalog warm failed after $max attempts" >&2
+          echo "::error::Catalog warm failed after $max attempts (last HTTP was transient)"
           exit 1
