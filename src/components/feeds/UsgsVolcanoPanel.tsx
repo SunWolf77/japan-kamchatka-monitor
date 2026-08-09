@@ -1,10 +1,12 @@
 /**
  * USGS HANS elevated volcanoes — AVO-first Pacific neighbor (not KVERT).
+ * Recent AVO notice text under the elevated list.
  */
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Mountain } from "lucide-react";
 import {
+  AVO_SITE_URL,
   USGS_VHP_UPDATES_URL,
   badgeVariantForColor,
   colorHex,
@@ -62,43 +64,58 @@ export function UsgsVolcanoPanel({
     ? [...snap.avo, ...snap.elevated.filter((v) => !v.isAvo)]
     : snap.elevated;
   const shown = list.slice(0, compact ? 4 : 12);
+  const notices = (snap.avoNotices ?? []).slice(0, compact ? 1 : 3);
+  const topNotice = notices[0];
 
   if (compact) {
     return (
       <div
         className={cn(
-          "flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-card/40 px-2.5 py-1.5 text-xs",
+          "flex flex-col gap-1 rounded-md border border-border/60 bg-card/40 px-2.5 py-1.5 text-xs",
           className,
         )}
       >
-        <Mountain className="h-3.5 w-3.5 text-sky-500" />
-        <span className="font-medium text-muted-foreground">USGS HANS</span>
-        {loading ? (
-          <span className="text-muted-foreground">…</span>
-        ) : shown.length === 0 ? (
-          <Badge variant="outline" className="text-[10px]">
-            no elevated U.S.
-          </Badge>
-        ) : (
-          shown.map((v) => (
-            <Badge
-              key={v.id}
-              variant={badgeVariantForColor(v.colorCode)}
-              className="text-[10px]"
-              style={{ borderColor: colorHex(v.colorCode) }}
-            >
-              {v.name} {v.colorCode}
+        <div className="flex flex-wrap items-center gap-2">
+          <Mountain className="h-3.5 w-3.5 text-sky-500" />
+          <span className="font-medium text-muted-foreground">USGS HANS</span>
+          {loading ? (
+            <span className="text-muted-foreground">…</span>
+          ) : shown.length === 0 ? (
+            <Badge variant="outline" className="text-[10px]">
+              no elevated U.S.
             </Badge>
-          ))
+          ) : (
+            shown.map((v) => (
+              <Badge
+                key={v.id}
+                variant={badgeVariantForColor(v.colorCode)}
+                className="text-[10px]"
+                style={{ borderColor: colorHex(v.colorCode) }}
+              >
+                {v.name} {v.colorCode}
+              </Badge>
+            ))
+          )}
+          <a
+            href={USGS_VHP_UPDATES_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+        {topNotice?.synopsis && (
+          <p className="line-clamp-2 text-[10px] leading-snug text-muted-foreground">
+            <span className="font-medium text-sky-600/90">AVO</span>{" "}
+            {topNotice.synopsis}
+            {topNotice.sentAt != null && (
+              <span className="ml-1 opacity-70">
+                · {formatRelativeTime(topNotice.sentAt)}
+              </span>
+            )}
+          </p>
         )}
-        <a
-          href={USGS_VHP_UPDATES_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="ml-auto text-muted-foreground hover:text-foreground"
-        >
-          <ExternalLink className="h-3 w-3" />
-        </a>
       </div>
     );
   }
@@ -171,6 +188,75 @@ export function UsgsVolcanoPanel({
             )}
           </div>
         ))}
+
+        {/* Recent AVO notices */}
+        {notices.length > 0 && (
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Recent AVO notices
+              </h4>
+              <a
+                href={AVO_SITE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-sky-600 hover:underline"
+              >
+                avo.alaska.edu
+              </a>
+            </div>
+            {notices.map((n) => (
+              <div
+                key={n.id}
+                className="rounded-md border border-sky-500/15 bg-sky-500/5 px-2.5 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {n.volcanoes && (
+                    <span className="text-xs font-medium">{n.volcanoes}</span>
+                  )}
+                  {n.colorCode && n.colorCode !== "UNKNOWN" && (
+                    <Badge
+                      variant={badgeVariantForColor(n.colorCode)}
+                      className="text-[10px]"
+                      style={{ borderColor: colorHex(n.colorCode) }}
+                    >
+                      {n.colorCode}
+                    </Badge>
+                  )}
+                  {n.alertLevel && n.alertLevel !== "UNKNOWN" && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {n.alertLevel}
+                    </Badge>
+                  )}
+                  <span className="text-[10px] text-muted-foreground">
+                    {n.typeTitle}
+                  </span>
+                  {n.sentAt != null && (
+                    <span className="ml-auto text-[10px] text-muted-foreground">
+                      {formatRelativeTime(n.sentAt)}
+                    </span>
+                  )}
+                </div>
+                {n.synopsis && (
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {n.synopsis}
+                  </p>
+                )}
+                {n.noticeUrl && (
+                  <a
+                    href={n.noticeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    full notice <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <a
           href={USGS_VHP_UPDATES_URL}
           target="_blank"
