@@ -4,11 +4,16 @@
  */
 
 export const USGS_HANS_API = "https://volcanoes.usgs.gov/hans-public/api/volcano";
+export const USGS_HANS_NOTICE_API =
+  "https://volcanoes.usgs.gov/hans-public/api/notice";
 export const USGS_ELEVATED_URL = `${USGS_HANS_API}/getElevatedVolcanoes`;
 export const USGS_VSC_ELEVATED_URL =
   "https://volcanoes.usgs.gov/vsc/api/volcanoApi/elevated";
+export const USGS_AVO_NOTICES_URL = `${USGS_HANS_NOTICE_API}/recent/avo/3`;
+export const USGS_NEWEST_NOTICES_URL = `${USGS_HANS_NOTICE_API}/getNewestOrRecent`;
 export const USGS_VHP_UPDATES_URL =
   "https://www.usgs.gov/programs/VHP/volcano-updates";
+export const AVO_SITE_URL = "https://www.avo.alaska.edu/";
 
 export type UsgsColorCode =
   | "GREEN"
@@ -45,12 +50,27 @@ export type UsgsVolcanoAlert = {
   isPacificNeighbor: boolean;
 };
 
+/** Recent AVO notice line for the HANS panel footer. */
+export type AvoNoticeLine = {
+  id: string;
+  typeTitle: string;
+  typeCd: string;
+  volcanoes: string;
+  synopsis: string;
+  colorCode: UsgsColorCode | null;
+  alertLevel: UsgsAlertLevel | null;
+  noticeUrl: string | null;
+  sentAt: number | null;
+};
+
 export type UsgsVolcanoSnapshot = {
   elevated: UsgsVolcanoAlert[];
   avo: UsgsVolcanoAlert[];
   top: UsgsVolcanoAlert | null;
   elevatedCount: number;
   avoCount: number;
+  /** Recent AVO notices (newest first), for panel under elevated list. */
+  avoNotices: AvoNoticeLine[];
   fetchedAt: number;
   sourceUrl: string;
   note: string;
@@ -81,6 +101,7 @@ export function emptyUsgsVolcano(error?: string): UsgsVolcanoSnapshot {
     top: null,
     elevatedCount: 0,
     avoCount: 0,
+    avoNotices: [],
     fetchedAt: Date.now(),
     sourceUrl: USGS_VSC_ELEVATED_URL,
     note: "USGS HANS · U.S. volcanoes only (AVO Aleutians primary). Kamchatka–Kurils: KVERT. Japan: JMA.",
@@ -114,6 +135,17 @@ function parseTime(sentUtc: unknown, unixtime: unknown): number | null {
     return Number.isFinite(t) ? t : null;
   }
   return null;
+}
+
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&/gi, "&")
+    .replace(/</gi, "<")
+    .replace(/>/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function isPacificNeighbor(
@@ -227,9 +259,135 @@ export function parseHansElevated(data: unknown): UsgsVolcanoAlert[] {
   return out.sort((a, b) => rankAlert(b) - rankAlert(a));
 }
 
+/**
+ * Parse getNewestOrRecent (or similar) into AVO notice lines with synopsis text.
+ */
+export function parseAvoNotices(data: unknown, limit = 4): AvoNoticeLine[] {
+  if (!Array.isArray(data)) return [];
+  const out: AvoNoticeLine[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const obs = String(r.obs ?? r.obs_abbr ?? "").toLowerCase();
+    if (obs && obs !== "avo") continue;
+    const id = String(
+      r.noticeIdentifier ?? r.notice_identifier ?? r.noticeId ?? "",
+    );
+    if (!id) continue;
+
+    const sections = Array.isArray(r.sections) ? r.sections : [];
+    const synParts: string[] = [];
+    let color: UsgsColorCode | null = null;
+    let alert: UsgsAlertLevel | null = null;
+    const volNames: string[] = [];
+
+    for (const sec of sections) {
+      if (!sec || typeof sec !== "object") continue;
+      const s = sec as Record<string, unknown>;
+      const syn = String(
+        s.synopsis_complete ?? s.synopsis ?? s.summary ?? "",
+      ).trim();
+      if (syn) synParts.push(stripHtml(syn));
+      if (s.colorCode != null || s.color_code != null)
+        color = normColor(s.colorCode ?? s.color_code);
+      if (s.alertLevel != null || s.alert_level != null)
+        alert = normAlert(s.alertLevel ?? s.alert_level);
+      const vn = String(s.volcanoName ?? s.volcano_name ?? "").trim();
+      if (vn) volNames.push(vn);
+    }
+
+    let synopsis = synParts[0] ?? "";
+    if (!synopsis && r.misc != null) synopsis = stripHtml(String(r.misc));
+    if (!synopsis) {
+      synopsis = String(r.notice_type_title ?? r.noticeType ?? "").trim();
+    }
+
+    const volcanoes =
+      volNames.length > 0
+        ? volNames.join(", ")
+        : String(r.volcanoes ?? r.volcano_cds_csv ?? "").trim();
+
+    out.push({
+      id,
+      typeTitle: String(
+        r.noticeType ?? r.notice_type_title ?? r.noticeTypeCd ?? "Notice",
+      ),
+      typeCd: String(r.noticeTypeCd ?? r.notice_type_cd ?? ""),
+      volcanoes,
+      synopsis,
+      colorCode: color,
+      alertLevel: alert,
+      noticeUrl:
+        r.notice_url != null
+          ? String(r.notice_url)
+          : id
+            ? `https://volcanoes.usgs.gov/hans-public/notice/${id}`
+            : null,
+      sentAt: parseTime(
+        r.sentUtc ?? r.sent_utc,
+        r.sent_unixtime ?? r.sentUnixtime,
+      ),
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * Enrich thin recent/avo rows with getNoticeFormatted section synopsis.
+ */
+export function parseNoticeFormatted(
+  data: unknown,
+  meta?: {
+    id?: string;
+    typeTitle?: string;
+    noticeUrl?: string | null;
+    sentAt?: number | null;
+  },
+): AvoNoticeLine | null {
+  if (!data || typeof data !== "object") return null;
+  const r = data as Record<string, unknown>;
+  const id = String(r.notice_identifier ?? meta?.id ?? "");
+  if (!id) return null;
+  const sections = Array.isArray(r.sections) ? r.sections : [];
+  const synParts: string[] = [];
+  let color: UsgsColorCode | null = null;
+  let alert: UsgsAlertLevel | null = null;
+  const volNames: string[] = [];
+  for (const sec of sections) {
+    if (!sec || typeof sec !== "object") continue;
+    const s = sec as Record<string, unknown>;
+    const syn = String(
+      s.synopsis_complete ?? s.synopsis ?? s.summary ?? "",
+    ).trim();
+    if (syn) synParts.push(stripHtml(syn));
+    if (s.color_code != null || s.colorCode != null)
+      color = normColor(s.color_code ?? s.colorCode);
+    if (s.alert_level != null || s.alertLevel != null)
+      alert = normAlert(s.alert_level ?? s.alertLevel);
+  }
+  return {
+    id,
+    typeTitle: meta?.typeTitle ?? String(r.notice_type_cd ?? "Notice"),
+    typeCd: String(r.notice_type_cd ?? ""),
+    volcanoes: volNames.join(", "),
+    synopsis: synParts[0] ?? "",
+    colorCode: color,
+    alertLevel: alert,
+    noticeUrl:
+      meta?.noticeUrl ??
+      `https://volcanoes.usgs.gov/hans-public/notice/${id}`,
+    sentAt: meta?.sentAt ?? parseTime(r.sent_utc, null),
+  };
+}
+
 export function buildUsgsVolcanoSnapshot(
   elevated: UsgsVolcanoAlert[],
-  opts?: { error?: string; sourceUrl?: string },
+  opts?: {
+    error?: string;
+    sourceUrl?: string;
+    avoNotices?: AvoNoticeLine[];
+  },
 ): UsgsVolcanoSnapshot {
   const avo = elevated.filter((v) => v.isAvo);
   return {
@@ -238,6 +396,7 @@ export function buildUsgsVolcanoSnapshot(
     top: elevated[0] ?? null,
     elevatedCount: elevated.length,
     avoCount: avo.length,
+    avoNotices: opts?.avoNotices ?? [],
     fetchedAt: Date.now(),
     sourceUrl: opts?.sourceUrl ?? USGS_VSC_ELEVATED_URL,
     note: "USGS HANS · U.S. only (AVO Aleutians primary). Kamchatka–Kurils: KVERT. Japan: JMA.",
