@@ -2,7 +2,7 @@
   "name": "ses-japan-kamchatka-monitor",
   "private": true,
   "version": "0.1.0",
-  "description": "Japan Arc + Kamchatka\u2013Kurils seismic, volcano & tsunami monitor \u2014 Sun-Earth-Sentinel focus node #3 (JMA Bosai + USGS + SUPT Continuum)",
+  "description": "Japan Arc + Kamchatka–Kurils seismic, volcano & tsunami monitor — Sun-Earth-Sentinel focus node #3 (JMA Bosai + USGS + SUPT Continuum)",
   "sideEffects": false,
   "type": "module",
   "overrides": {
@@ -48,6 +48,7 @@
     "@tanstack/react-start": "^1.160.0",
     "@tanstack/react-table": "^8.21.0",
     "@tanstack/router-plugin": "^1.160.0",
+    "@vercel/analytics": "^2.0.1",
     "better-auth": "^1.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
